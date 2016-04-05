@@ -1,0 +1,125 @@
+Thu Jan  1 06:25:27 CET 1970
+user
+adb shell getprop ro.tct.sys.ver : 
+Y1A2L5G3BX20
+adb -s 24f8fc02 shell cat /sys/module/lowmemorykiller/parameters/adj : 
+0,58,117,176,529,1000
+adb -s 24f8fc02 shell cat /sys/module/lowmemorykiller/parameters/minfree : 
+14746,18432,22118,28386,48000,82500
+adb -s 24f8fc02 shell cat /sys/module/lowmemorykiller/parameters/vmpressure_file_min : 
+105625
+adb -s 24f8fc02 shell cat /proc/sys/vm/swappiness : 
+60
+adb -s 24f8fc02 shell cat /proc/swaps : 
+Filename				Type		Size	Used	Priority
+/dev/block/zram0                        partition	524284	117604	-1
+
+/dev/block/zram1                        partition	777777	222222	-1
+adb -s 24f8fc02 shell cat /sys/module/lowmemorykiller/parameters/enable_adaptive_lmk : 
+1
+adb -s 24f8fc02 shell cat /proc/sys/vm/extra_free_kbytes : 
+72900
+adb -s 24f8fc02 shell cat /sys/module/process_reclaim/parameters/enable_process_reclaim : 
+0
+adb -s 24f8fc02 shell cat /proc/sys/vm/min_free_kbytes : 
+5273
+adb -s 24f8fc02 shell cat /proc/sys/vm/user_reserve_kbytes : 
+58108
+adb -s 24f8fc02 shell dumpsys battery : 
+Current Battery Service state:
+  AC powered: false
+  USB powered: true
+  Wireless powered: false
+  Max charging current: 500000
+  status: 2
+  health: 2
+  present: true
+  level: 66
+  scale: 100
+  voltage: 3961
+  temperature: 300
+  technology: Li-ion
+adb -s 24f8fc02 shell cat /proc/zoneinfo : 
+Node 0, zone      DMA
+  pages free     69806
+        min      1478
+        low      20324
+        high     20694
+        scanned  0
+        spanned  524288
+        present  493312
+        managed  439714
+    nr_free_pages 69806
+    nr_inactive_anon 36523
+    nr_active_anon 84212
+    nr_inactive_file 83761
+    nr_active_file 96351
+    nr_unevictable 1558
+    nr_mlock     0
+    nr_anon_pages 119272
+    nr_mapped    72716
+    nr_file_pages 184698
+    nr_dirty     25
+    nr_writeback 0
+    nr_slab_reclaimable 7148
+    nr_slab_unreclaimable 18926
+    nr_page_table_pages 8163
+    nr_kernel_stack 1721
+    nr_unstable  0
+    nr_bounce    0
+    nr_vmscan_write 182888
+    nr_vmscan_immediate_reclaim 5
+    nr_writeback_temp 0
+    nr_isolated_anon 0
+    nr_isolated_file 0
+    nr_shmem     1339
+    nr_dirtied   21802
+    nr_written   199563
+    nr_anon_transparent_hugepages 0
+    nr_free_cma  5523
+    nr_swapcache 1689
+        protection: (0, 0, 0)
+  pagesets
+    cpu: 0
+              count: 183
+              high:  186
+              batch: 31
+  vm stats threshold: 40
+    cpu: 1
+              count: 146
+              high:  186
+              batch: 31
+  vm stats threshold: 40
+    cpu: 2
+              count: 125
+              high:  186
+              batch: 31
+  vm stats threshold: 40
+    cpu: 3
+              count: 172
+              high:  186
+              batch: 31
+  vm stats threshold: 40
+    cpu: 4
+              count: 73
+              high:  186
+              batch: 31
+  vm stats threshold: 40
+    cpu: 5
+              count: 52
+              high:  186
+              batch: 31
+  vm stats threshold: 40
+    cpu: 6
+              count: 180
+              high:  186
+              batch: 31
+  vm stats threshold: 40
+    cpu: 7
+              count: 176
+              high:  186
+              batch: 31
+  vm stats threshold: 40
+  all_unreclaimable: 0
+  start_pfn:         524288
+  inactive_ratio:    3
