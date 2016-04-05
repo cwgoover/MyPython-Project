@@ -1,0 +1,13 @@
+StoreName1
+, Address
+, City
+,State
+,Zip
+, Phone
+
+StoreName2
+, Address
+, City
+,State
+,Zip
+, Phone
