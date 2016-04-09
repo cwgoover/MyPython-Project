@@ -2,9 +2,10 @@
 import argparse
 import os
 import re
-
 from os.path import basename
 from os.path import splitext
+
+import pylab as pl
 
 rx = re.compile(r"""
     (?P<title>proc.*cpu[-]+[\n\r])              # Title at the beginning of a line
@@ -22,6 +23,7 @@ def main():
     args = parser.parse_args()
     infile = args.file
     outfile = args.output
+    # recombine file name: xx.txt -> xx_table.txt
     out_table = "{0}_table.txt".format(splitext(basename(outfile))[0])
 
     vmstat_matrix = read_file(infile)
@@ -33,21 +35,29 @@ def main():
     chart, average_dic = statis_matrix(vmstat_matrix)
     print_table(out_table, chart, average_dic)
 
+    # press [enter] to close all the figures in the show module
+    # otherwise, all the figures will be closed after finished this script
+    # _ = raw_input("Press [enter] to exit.")
+
 
 def statis_matrix(stat_matrix):
     """
     1. transpose matrix to make all the values of each vmstat's item in the single list.
     2. find the key vmstat's item, and get each number's frequence and average value in one vmstat's item.
-    3. TODO: draw other items with all the values in each vmstat's item.
+    3. draw other items with all the values in each vmstat's item.
     """
     chart = {}
     average_dic = {}
+    # Can I generate and show a different image during each loop with Matplotlib?
+    # http://stackoverflow.com/a/11129869/4710864
+    # pl.ion()    # turn on interactive mode, non-blocking `show`, otherwise only show one figure
+
     # transpose rows and columns in the matrix, skipped the title in the first line
     for key in [[row[i] for row in stat_matrix[1:]] for i in range(len(stat_matrix[1]))]:
         # For example: key = ['r', '3', '0', '3', '5', '0', '8', '3', '1', '1', '0', '3',...]
         if key[0] in ('r', 'b', 'us', 'sy', 'id', 'wa'):
             # Limiting floats to two decimal points
-            # http://stackoverflow.com/a/455634/4710864    http://stackoverflow.com/a/6539677/4710864
+            # http://stackoverflow.com/a/455634/4710864  or  http://stackoverflow.com/a/6539677/4710864
             #
             # finding average of a list: http://stackoverflow.com/a/9039992/4710864
             # or 'reduce(lambda x,y:x+y, [float(x) for x in distance])'
@@ -60,8 +70,25 @@ def statis_matrix(stat_matrix):
             # http://stackoverflow.com/a/3170549/4710864 (mypython #3)
             chart[key[0]] = sorted((-key.count(w), w) for w in set(key[1:]))
         else:
-            # TODO: draw 2D line to show detail
-            pass
+            pl.figure()
+            pl.title(key[0])    # show title
+            pl.xlabel('time')
+            pl.ylabel('value')
+            # Convert all strings in a list to int:
+            # http://stackoverflow.com/questions/7368789/convert-all-strings-in-a-list-to-int
+            # results = map(int, results)
+            #
+            # Create a range of numbers with a given increment
+            # http://stackoverflow.com/a/18325904/4710864
+            # In Python, range(start, stop + 1, step) can be used like Matlab's start:step:stop command.
+            #
+            pl.plot(range(len(key[1:])), map(int, key[1:]), linewidth=2)
+            # pl.show()
+            # Save plot to image file instead of displaying it using Matplotlib
+            # http://stackoverflow.com/a/9890599/4710864
+            pl.savefig("{0}.png".format(key[0]))
+            # time.sleep(1) # wait 1 second to show next one.
+
     return chart, average_dic
 
 
