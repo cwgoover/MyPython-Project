@@ -2,18 +2,9 @@
 import argparse
 import os
 import re
+
 from os.path import basename
 from os.path import splitext
-
-import pylab as pl
-
-rx = re.compile(r"""
-    (?P<title>proc.*cpu[-]+[\n\r])              # Title at the beginning of a line
-    [\n\r]*                                     # empty newline
-    (?P<subtitle>\s?r\s+b\s+swpd.*wa[\n\r])     # Subtitle
-    [\n\r]*
-    (?P<record>^(\s?\b[0-9]+\b\s+)+[\n\r])      # record
-    """, re.MULTILINE | re.VERBOSE)
 
 
 def main():
@@ -35,82 +26,48 @@ def main():
     chart, average_dic = statis_matrix(vmstat_matrix)
     print_table(out_table, chart, average_dic)
 
-    # press [enter] to close all the figures in the show module
-    # otherwise, all the figures will be closed after finished this script
-    # _ = raw_input("Press [enter] to exit.")
-
 
 def statis_matrix(stat_matrix):
     """
     1. transpose matrix to make all the values of each vmstat's item in the single list.
     2. find the key vmstat's item, and get each number's frequence and average value in one vmstat's item.
-    3. draw other items with all the values in each vmstat's item.
+    3. TODO: draw other items with all the values in each vmstat's item.
     """
     chart = {}
     average_dic = {}
-    # Can I generate and show a different image during each loop with Matplotlib?
-    # http://stackoverflow.com/a/11129869/4710864
-    # pl.ion()    # turn on interactive mode, non-blocking `show`, otherwise only show one figure
-
     # transpose rows and columns in the matrix, skipped the title in the first line
     for key in [[row[i] for row in stat_matrix[1:]] for i in range(len(stat_matrix[1]))]:
         # For example: key = ['r', '3', '0', '3', '5', '0', '8', '3', '1', '1', '0', '3',...]
         if key[0] in ('r', 'b', 'us', 'sy', 'id', 'wa'):
-            # Limiting floats to two decimal points
-            # http://stackoverflow.com/a/455634/4710864  or  http://stackoverflow.com/a/6539677/4710864
-            #
-            # finding average of a list: http://stackoverflow.com/a/9039992/4710864
-            # or 'reduce(lambda x,y:x+y, [float(x) for x in distance])'
-            # reduce function: https://docs.python.org/2/library/functions.html#reduce
-            #
-            # filter elements which is bigger than 100: if function in lambda
             average_dic[key[0]] = "{0:.2f}".format(
-                reduce(lambda x, y: int(x) + int(y) if int(y) < 100 else int(x), key[1:]) /
-                float(len([num for num in key[1:] if int(num) < 100])))
+                reduce(lambda x, y: int(x) + int(y), key[1:]) / (float(len(key)) - 1))
             # generate chart with key values' frequency
-            # based on: Build an ASCII chart of the most commonly used words in a given text
-            # http://stackoverflow.com/a/3170549/4710864 (mypython #3)
             chart[key[0]] = sorted((-key.count(w), w) for w in set(key[1:]))
         else:
-            pl.figure()
-            pl.title(key[0])  # show title
-            pl.xlabel('time')
-            pl.ylabel('value')
-            # Convert all strings in a list to int:
-            # http://stackoverflow.com/questions/7368789/convert-all-strings-in-a-list-to-int
-            # results = map(int, results)
-            #
-            # Create a range of numbers with a given increment
-            # http://stackoverflow.com/a/18325904/4710864
-            # In Python, range(start, stop + 1, step) can be used like Matlab's start:step:stop command.
-            #
-            pl.plot(range(len(key[1:])), map(int, key[1:]), linewidth=2)
-            # pl.show()
-            # Save plot to image file instead of displaying it using Matplotlib
-            # http://stackoverflow.com/a/9890599/4710864
-            pl.savefig("{0}.png".format(key[0]))
-            # time.sleep(1) # wait 1 second to show next one.
-
+            # TODO: draw 2D line to show detail
+            pass
     return chart, average_dic
 
 
 def read_file(filename):
     vmstat_matrix = []
-    first_line = True
+    i = 2
     with open(filename, 'r') as fp:
-        for match in rx.finditer(fp.read()):
-            if first_line:
-                first_line = False
-                vmstat_matrix.append(match.group('title'))
-                vmstat_matrix.append(match.group('subtitle').split())
-                vmstat_matrix.append(match.group('record').rstrip().split())
+        for line in fp:
+            if len(vmstat_matrix) == 0 or not vmstat_matrix[0]:
+                title = re.match(r'procs[\s\-\w]+', line)
+                if title is not None:
+                    vmstat_matrix.insert(0, title.group().strip())
+            elif len(vmstat_matrix) == 1 or not vmstat_matrix[1]:
+                subtitle = re.search(r'r\s+b[\s\w]+', line)
+                if subtitle is not None:
+                    vmstat_matrix.insert(1, subtitle.group().rstrip().split())
             else:
-                # Python's rstrip method strips all kinds of trailing whitespace
-                #  by default, not just newlines
-                #
-                # use split()) to directly create matrix here
-                vmstat_matrix.append(match.group('record').rstrip().split())
-    return vmstat_matrix
+                # match to filter out raw literals
+                record = re.match(r'\s*\d+[\s\d]+[\r\n]+', line)
+                if record is not None:
+                    vmstat_matrix.insert(i, record.group().rstrip().split())
+        return vmstat_matrix
 
 
 def print_file(outfile, stat_list):
@@ -155,7 +112,6 @@ def print_table(outfile, stat_map, average_dic):
     f.write("\n\nwa: {0}".format(average_dic['wa']))
     draw_cylinder(f, stat_map['wa'])
     f.close()
-
 
 if __name__ == '__main__':
     main()
