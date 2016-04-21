@@ -1,60 +1,81 @@
 #!/usr/bin/python
 import argparse
+import errno
 import itertools
-import ntpath
 import os
 import re
 from subprocess import check_output
+from time import strftime
 
 from openpyxl import Workbook
 from openpyxl.cell import get_column_letter
 from openpyxl.compat import range
 from openpyxl.styles import Color, PatternFill, Font, Alignment, Border, Side
 
-CMD_PACKAGES = "adb shell pm list packages -f | tee pkgs.txt"
-CMD_MEMINFO = "adb shell dumpsys meminfo | tee meminfo.txt"
+CMD_PACKAGES = "adb shell pm list packages -f"
+CMD_MEMINFO = "adb shell dumpsys meminfo"
+# used for generating dir's name
+CMD_DEVICE = "adb shell getprop ro.product.device"
+CMD_VERSION = "adb shell getprop ro.build.version.incremental"
+
+SYSTEM_PROC_WHITE_LIST = ['system', 'android.process.media', 'android.process.acore']
 
 TITLE = ['Memory', 'Total RAM', 'Free RAM', 'Kernel', 'Native',
          'Module', 'GMS', 'Qcom', 'Third', 'System apps',
          'Packages', 'installed', 'gms', 'qcom', 'third', 'system']
 
-meminfo_1 = ""
-meminfo_2 = ""
-outfile = ""
+meminfo_file = 'meminfo.txt'
+packages_file = 'packages.txt'
+out_parse_table = 'parse_table.txt'
+out_parse_xlsx = 'parse_diff_info.xlsx'
+
+original_dir = ""
+diff_dir = ""
 
 
 def main():
-    global meminfo_1, meminfo_2, outfile
-    # TODO: need usage()
+    global original_dir, diff_dir
 
-    # compare: xx.py -f meminfo pm -d meminfo pm -o output
-    # analyse: xx.py -o table (need default file name)
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-f', '--file', nargs='*', help='need meminfo & pm info two files')
-    parser.add_argument('-d', '--diff', nargs='*', help='need meminfo & pm info two files')
-    parser.add_argument('-o', '--output', nargs='?', default='parse_result.txt',
-                        help='output file with table format')
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, epilog='''
+Example of use:
+  comparison mode: $ python parse_meminfo.py -f original_dir -d diff_dir
+  analysis mode:   $ python parse_meminfo.py [-o outdir]
+''')
+    parser.add_argument('-f', '--file', nargs='*', help="the original directory's name")
+    parser.add_argument('-d', '--diff', nargs='*', help="the diff directory's name")
+    parser.add_argument('-o', '--outdir', nargs='?',  # default='parse_result.txt',
+                        help='For analysis mode, save result in the custom directory')
     args = parser.parse_args()
-    outfile = str(args.output)
 
     if args.file is None:
+        # prepare output directory's name
+        if args.outdir is None:
+            device_name = check_output(CMD_DEVICE, shell=True)
+            version_name = check_output(CMD_VERSION, shell=True)
+            # http://stackoverflow.com/a/27866830/4710864
+            cur_time = strftime("%m%d%H%M")
+            outdir = "{}_{}_{}".format(device_name.strip(), version_name.strip(), cur_time.strip())
+        else:
+            outdir = str(args.outdir)
+
         # Run command with arguments and return its output as a byte string.
         file_meminfo = check_output(CMD_MEMINFO, shell=True)
+        write_to_file("{}/{}".format(outdir, meminfo_file), file_meminfo)
         system_mem, filtered_procs_mem = get_file_meminfo(file_meminfo)
 
         installed_pkgs_str = check_output(CMD_PACKAGES, shell=True)
+        write_to_file("{}/{}".format(outdir, packages_file), installed_pkgs_str)
         pkgs_dic = get_packages_dic(installed_pkgs_str)
 
         groups_mem_kb, groups_mem = get_procs_attr_group(filtered_procs_mem, pkgs_dic)
-        print_mem_table(system_mem, groups_mem_kb, pkgs_dic)
+        print_mem_table("{}/{}".format(outdir, out_parse_table), system_mem, groups_mem_kb, pkgs_dic)
     else:
-        meminfo_1 = args.file[0]
-        pm_list_1 = args.file[1]
-        meminfo_2 = args.diff[0]
-        pm_list_2 = args.diff[1]
-        # change output file to .xlsx
-        base = ntpath.basename(outfile)
-        outfile = "{}.xlsx".format(ntpath.splitext(base)[0])
+        original_dir = args.file[0]
+        diff_dir = args.diff[0]
+        meminfo_1 = "{}/{}".format(original_dir, meminfo_file)
+        pm_list_1 = "{}/{}".format(original_dir, packages_file)
+        meminfo_2 = "{}/{}".format(diff_dir, meminfo_file)
+        pm_list_2 = "{}/{}".format(diff_dir, packages_file)
 
         system_mem_1, filtered_procs_mem_1 = get_file_meminfo(read_file(meminfo_1))
         system_mem_2, filtered_procs_mem_2 = get_file_meminfo(read_file(meminfo_2))
@@ -65,10 +86,65 @@ def main():
         print_diff_table(system_mem_1, system_mem_2, pkgs_dic_1, pkgs_dic_2,
                          groups_mem_kb_1, groups_mem_kb_2, groups_mem_1, groups_mem_2)
 
+        # print "************* system meminfo*********************"
+        # print system_mem_1
+        # print "\n**************************************************"
+        # print system_mem_2
+        # print "\n\n************* process meminfo ********************"
+        # for k, v in sorted(filtered_procs_mem_1.items(), key=lambda x: (-int(x[1]), x[0])):
+        #     print (' {1}:  {0}'.format(k, v))
+        #
+        # print "\n**************************************************"
+        # for k, v in sorted(filtered_procs_mem_2.items(), key=lambda x: (-int(x[1]), x[0])):
+        #     print (' {1}:  {0}'.format(k, v))
+        #
+        # print "\n\n***************** packages ***********************"
+        # for key in pkgs_dic_1:
+        #     print key, ":"
+        #     for pkg in sorted(pkgs_dic_1[key]):
+        #         print "** ", pkg
+        #     print 'len=', len(pkgs_dic_1[key])
+        #
+        # print "\n**************************************************"
+        # for key in pkgs_dic_2:
+        #     print key, ":"
+        #     for pkg in sorted(pkgs_dic_2[key]):
+        #         print "** ", pkg
+        #     print 'len=', len(pkgs_dic_2[key])
+        #
+        # print "\n\n************** group meminfo kb ******************"
+        # print groups_mem_kb_1
+        # print "\n**************************************************"
+        # print groups_mem_kb_2
+        # print "\n\n**************group meminfo ***********************"
+        # for key in groups_mem_1:
+        #     print key, ":"
+        #     for pkg in sorted(groups_mem_1[key]):
+        #         print "** ", pkg
+        #     print 'len=', len(groups_mem_1[key])
+        # print "\n**************************************************"
+        # for key in groups_mem_2:
+        #     print key, ":"
+        #     for pkg in sorted(groups_mem_2[key]):
+        #         print "** ", pkg
+        #     print 'len=', len(groups_mem_2[key])
+
 
 def read_file(filename):
     with open(filename, 'r') as fp:
         return fp.read()
+
+
+def write_to_file(filename, file_meminfo):
+    # automatically creating directories with file output
+    if not os.path.exists(os.path.dirname(filename)):
+        try:
+            os.makedirs(os.path.dirname(filename))
+        except OSError as exc:  # Guard against race condition
+            if exc.errno != errno.EEXIST:
+                raise
+    with open(filename, 'w') as fp:
+        fp.write(file_meminfo)
 
 
 def get_procs_attr_group(filtered_procs_mem, pkgs_dic):
@@ -79,6 +155,7 @@ def get_procs_attr_group(filtered_procs_mem, pkgs_dic):
     qcom_procs_mem = []
     third_procs_mem = []
     sys_procs_mem = []
+
     for proc in filtered_procs_mem:
         if "com.google" in proc or "chrome" in proc:
             gms_kb += int(filtered_procs_mem[proc])
@@ -87,7 +164,8 @@ def get_procs_attr_group(filtered_procs_mem, pkgs_dic):
             qcom_kb += int(filtered_procs_mem[proc])
             qcom_procs_mem.append(proc)
         else:
-            if any(pkg in proc for pkg in pkgs_dic['system']) or proc == 'system':
+            if any(pkg in proc for pkg in pkgs_dic['system'] if pkg != 'android' and pkg != 'android.overlay')\
+                    or any(proc == item for item in SYSTEM_PROC_WHITE_LIST):
                 sys_kb += int(filtered_procs_mem[proc])
                 sys_procs_mem.append(proc)
             else:
@@ -191,7 +269,7 @@ def filter_out_native_processes(procs_mem, native_mem):
     return filtered_procs_mem
 
 
-def print_mem_table(system_mem, groups_mem_kb, pkgs_dic):
+def print_mem_table(outfile, system_mem, groups_mem_kb, pkgs_dic):
     row_format = "{:<20}{}\n"
     if os.path.isfile(outfile):
         os.remove(outfile)
@@ -276,7 +354,7 @@ def render_ws(ws):
 
 def print_diff_table(system_mem_1, system_mem_2, pkgs_dic_1, pkgs_dic_2,
                      groups_mem_kb_1, groups_mem_kb_2, groups_mem_1, groups_mem_2):
-    ws_tile = ['Items', ntpath.basename(meminfo_1), ntpath.basename(meminfo_2), 'Gap', 'Detail']
+    ws_tile = ['Items', original_dir, diff_dir, 'Gap', 'Detail']
     total_memory_items = ['Total RAM', 'Free RAM', 'Kernel', 'Native']
     module_memory_items = ['GMS', 'Qcom', 'Third', 'System apps']
     package_items = ['installed', 'gms', 'qcom', 'third', 'system']
@@ -304,7 +382,9 @@ def print_diff_table(system_mem_1, system_mem_2, pkgs_dic_1, pkgs_dic_2,
             # Writing multi-line strings into cells using openpyxl
             c = ws.cell(column=5, row=TITLE.index(col) + 2)
             c.style.alignment.wrap_text = True
-            c.value = "ADDED PROCESSES:\n{}".format('\n'.join(set(groups_mem_1[col]) - set(groups_mem_2[col])))
+            c.value = "ADDED PROCESSES:\n{}\n\nREMOVED PROCESSES:\n{}".format(
+                '\n'.join(set(groups_mem_1[col]) - set(groups_mem_2[col])),
+                '\n'.join(set(groups_mem_2[col]) - set(groups_mem_1[col])))
             styled_cell(c)
         if col in package_items:
             styled_cell(ws.cell(column=2, row=TITLE.index(col) + 2, value=len(pkgs_dic_1[col])))
@@ -322,7 +402,7 @@ def print_diff_table(system_mem_1, system_mem_2, pkgs_dic_1, pkgs_dic_2,
                 styled_cell(c)
 
     render_ws(ws)
-    wb.save(filename=outfile)
+    wb.save(filename=out_parse_xlsx)
 
 
 def filter_out_items(list1, list2):
