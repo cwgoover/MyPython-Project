@@ -19,6 +19,7 @@ CMD_DEVICE = "adb shell getprop ro.product.device"
 CMD_VERSION = "adb shell getprop ro.build.version.incremental"
 
 SYSTEM_PROC_WHITE_LIST = ['system', 'android.process.media', 'android.process.acore']
+GOOGLE_PROC_WHITE_LIST = ['com.android.facelock', 'com.android.vending', 'com.android.chrome']
 
 TITLE = ['Memory', 'Total RAM', 'Free RAM', 'Kernel', 'Native',
          'Module', 'GMS', 'Qcom', 'Third', 'System apps',
@@ -52,7 +53,6 @@ Example of use:
         if args.outdir is None:
             device_name = check_output(CMD_DEVICE, shell=True)
             version_name = check_output(CMD_VERSION, shell=True)
-            # http://stackoverflow.com/a/27866830/4710864
             cur_time = strftime("%m%d%H%M")
             outdir = "{}_{}_{}".format(device_name.strip(), version_name.strip(), cur_time.strip())
         else:
@@ -143,8 +143,18 @@ def write_to_file(filename, file_meminfo):
         except OSError as exc:  # Guard against race condition
             if exc.errno != errno.EEXIST:
                 raise
-    with open(filename, 'w') as fp:
-        fp.write(file_meminfo)
+    try:
+        with open(filename, 'w') as fp:
+            fp.write(file_meminfo)
+    except IOError:
+        print 'Oops! write file error.'
+        # Most pythonic way to delete a file which may not exist
+        # http://stackoverflow.com/a/10840586/4710864
+        try:
+            os.remove(filename)
+        except OSError:
+            if exc.errno != errno.EEXIST:
+                raise
 
 
 def get_procs_attr_group(filtered_procs_mem, pkgs_dic):
@@ -157,7 +167,7 @@ def get_procs_attr_group(filtered_procs_mem, pkgs_dic):
     sys_procs_mem = []
 
     for proc in filtered_procs_mem:
-        if "com.google" in proc or "chrome" in proc:
+        if "com.google" in proc or any(item in proc for item in GOOGLE_PROC_WHITE_LIST):
             gms_kb += int(filtered_procs_mem[proc])
             gms_procs_mem.append(proc)
         elif "com.qti" in proc or "com.qualcomm" in proc:
@@ -201,7 +211,7 @@ def get_packages_dic(installed_pkgs_str):
     qcom_pkgs = []
     system_pkgs = []
     for pkg in installed_pkgs:
-        if "com.google" in pkg or "chrome" in pkg:
+        if "com.google" in pkg or any(pkg == item for item in GOOGLE_PROC_WHITE_LIST):
             gms_pkgs.append(pkg)
         elif "com.qti" in pkg or "com.qualcomm" in pkg:
             qcom_pkgs.append(pkg)
@@ -252,7 +262,7 @@ def get_file_meminfo(file_meminfo_str):
             if free is not None:
                 system_mem.update({'Free RAM': free.group(1)})
         elif not system_mem.get('Used RAM', ""):
-            used = re.search(r'Used RAM:\s+(\d+) kB\s+\((\d+) used pss\s+\+\s+(\d+) kernel\)', line)
+            used = re.search(r'Used RAM:\s+(\d+) kB\s+\((\d+) used pss\s+\+\s+(\d+) kernel', line)
             if used is not None:
                 system_mem.update({'Used RAM': used.group(1)})
                 system_mem.update({'Used Pss': used.group(2)})
@@ -381,7 +391,7 @@ def print_diff_table(system_mem_1, system_mem_2, pkgs_dic_1, pkgs_dic_2,
                                 value="{}MB".format(kb2mb(groups_mem_kb_1[col]) - kb2mb(groups_mem_kb_2[col]))))
             # Writing multi-line strings into cells using openpyxl
             c = ws.cell(column=5, row=TITLE.index(col) + 2)
-            c.style.alignment.wrap_text = True
+            # c.style.alignment.wrap_text = True
             c.value = "ADDED PROCESSES:\n{}\n\nREMOVED PROCESSES:\n{}".format(
                 '\n'.join(set(groups_mem_1[col]) - set(groups_mem_2[col])),
                 '\n'.join(set(groups_mem_2[col]) - set(groups_mem_1[col])))
@@ -392,7 +402,7 @@ def print_diff_table(system_mem_1, system_mem_2, pkgs_dic_1, pkgs_dic_2,
             styled_cell(ws.cell(column=4, row=TITLE.index(col) + 2,
                                 value=len(pkgs_dic_1[col]) - len(pkgs_dic_2[col])))
             c = ws.cell(column=5, row=TITLE.index(col) + 2)
-            c.style.alignment.wrap_text = True
+            # c.style.alignment.wrap_text = True
             diff_pkgs = [['\nADDED PACKAGES:'], set(pkgs_dic_1[col]) - set(pkgs_dic_2[col]),
                          ['\nREMOVED PACKAGES:'], set(pkgs_dic_2[col]) - set(pkgs_dic_1[col])]
             # extract nested lists

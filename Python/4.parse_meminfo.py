@@ -171,8 +171,18 @@ def write_to_file(filename, file_meminfo):
         except OSError as exc:  # Guard against race condition
             if exc.errno != errno.EEXIST:
                 raise
-    with open(filename, 'w') as fp:
-        fp.write(file_meminfo)
+    try:
+        with open(filename, 'w') as fp:
+            fp.write(file_meminfo)
+    except IOError:
+        print 'Oops! write file error.'
+        # Most pythonic way to delete a file which may not exist
+        # http://stackoverflow.com/a/10840586/4710864
+        try:
+            os.remove(filename)
+        except OSError:
+            if exc.errno != errno.EEXIST:
+                raise
 
 
 def get_procs_attr_group(filtered_procs_mem, pkgs_dic):
@@ -297,7 +307,7 @@ def get_file_meminfo(file_meminfo_str):
             if free is not None:
                 system_mem.update({'Free RAM': free.group(1)})
         elif not system_mem.get('Used RAM', ""):
-            used = re.search(r'Used RAM:\s+(\d+) kB\s+\((\d+) used pss\s+\+\s+(\d+) kernel\)', line)
+            used = re.search(r'Used RAM:\s+(\d+) kB\s+\((\d+) used pss\s+\+\s+(\d+) kernel', line)
             if used is not None:
                 system_mem.update({'Used RAM': used.group(1)})
                 system_mem.update({'Used Pss': used.group(2)})
