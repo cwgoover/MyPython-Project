@@ -1,0 +1,68 @@
+-----------------------------------
+Python applications for meminfo
+-----------------------------------
+
+There are two modes in this python: "comparison mode" & "analysis mode" (see below usage)
+
+  - "analysis mode": get meminfo and packages infos from the Android device, so before executing the command,
+            you should connect test device to the PC with a USB data cable. And after running, it will generate
+            a directory named by the device' info and current time in the current folder, or "-o" to customize.
+
+  - "comparison mode": Compare the main device and reference device, and generate xlsx table for the result.
+           The result is based on the main device, so you should put the main device's directory after "-f" argument,
+           and put the reference device's directory after "-d" argument. These directories can be got from the "analysis mode"
+
+-----------------------------------
+
+~$ python parse_meminfo.py -h
+
+Output:
+usage: 4.parse_meminfo.py [-h] [-p [PLATFORM]] [-f [FILE [FILE ...]]]
+                          [-d [DIFF [DIFF ...]]] [-o [OUTDIR]]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -p [PLATFORM], --platform [PLATFORM]
+                        0: Qualcomm; 1: MTK
+  -f [FILE [FILE ...]], --file [FILE [FILE ...]]
+                        the original directory's name
+  -d [DIFF [DIFF ...]], --diff [DIFF [DIFF ...]]
+                        the diff directory's name
+  -o [OUTDIR], --outdir [OUTDIR]
+                        For analysis mode, save result in the custom directory
+
+Example of use:
+  platform: 0(Qualcomm)/1(MTK)
+  comparison mode: $ python parse_meminfo.py [-p platform:0/1] -f original_dir -d diff_dir
+  analysis mode:   $ python parse_meminfo.py [-p platform:0/1] [-o outdir]
+
+
+-----------------------------------
+  INSTALLATION GUIDE
+-----------------------------------
+
+  Initial Requirements:
+1. Python 2.7 and Python development files (python-dev)
+2. Openpyxl library folder with the parse_meminfo.py in the same directory
+
+
+-----------------------------------
+  MTK PLATFORM GUIDE
+-----------------------------------
+
+  * generate main device's & reference device's directory:
+~$ python parse_meminfo.py -p 1
+
+  * compare two directories and get xlsx file:
+~$ python parse_meminfo.py -p 1 -f [main device dir] -d [reference deivce dir]
+
+
+-----------------------------------
+  QUALCOMM PLATFORM GUIDE
+-----------------------------------
+
+* generate main device's & reference device's directory:
+~$ python parse_meminfo.py [-p 0]
+
+* compare two directories and get xlsx file:
+~$ python parse_meminfo.py [-p 0] -f [main device dir] -d [reference deivce dir]

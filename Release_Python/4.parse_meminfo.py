@@ -4,11 +4,15 @@ import errno
 import itertools
 import os
 import re
+import shutil
+import subprocess
 from subprocess import check_output
 from time import strftime
 
 from openpyxl import Workbook
 from openpyxl.cell import get_column_letter
+
+# from openpyxl.utils import get_column_letter
 from openpyxl.compat import range
 from openpyxl.styles import Color, PatternFill, Font, Alignment, Border, Side
 
@@ -19,11 +23,18 @@ CMD_DEVICE = "adb shell getprop ro.product.device"
 CMD_VERSION = "adb shell getprop ro.build.version.incremental"
 
 SYSTEM_PROC_WHITE_LIST = ['system', 'android.process.media', 'android.process.acore']
-GOOGLE_PROC_WHITE_LIST = ['com.android.facelock', 'com.android.vending', 'com.android.chrome']
+GOOGLE_PROC_WHITE_LIST = ['com.google', 'com.android.facelock', 'com.android.vending', 'com.android.chrome']
 
-TITLE = ['Memory', 'Total RAM', 'Free RAM', 'Kernel', 'Native',
+QCOM_TITLE = ['Memory', 'Total RAM', 'Free RAM', 'Kernel', 'Native',
          'Module', 'GMS', 'Qcom', 'Third', 'System apps',
          'Packages', 'installed', 'gms', 'qcom', 'third', 'system']
+
+MTK_TITLE = ['Memory', 'Total RAM', 'Free RAM', 'Kernel', 'Native',
+             'Module', 'GMS', 'MTK', 'Third', 'System apps',
+             'Packages', 'installed', 'gms', 'mtk', 'third', 'system']
+
+PLATFORM_PKGS = []
+platform_flag = 0
 
 meminfo_file = 'meminfo.txt'
 packages_file = 'packages.txt'
@@ -35,40 +46,56 @@ diff_dir = ""
 
 
 def main():
-    global original_dir, diff_dir
+    global original_dir, diff_dir, out_parse_table
+    global platform_flag, PLATFORM_PKGS
 
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, epilog='''
 Example of use:
-  comparison mode: $ python parse_meminfo.py -f original_dir -d diff_dir
-  analysis mode:   $ python parse_meminfo.py [-o outdir]
+  platform: 0(Qualcomm)/1(MTK)
+  comparison mode: $ python parse_meminfo.py [-p platform:0/1] -f original_dir -d diff_dir
+  analysis mode:   $ python parse_meminfo.py [-p platform:0/1] [-o outdir]
 ''')
+    parser.add_argument('-p', '--platform', nargs='?', default='0', help="0: Qualcomm; 1: MTK")
     parser.add_argument('-f', '--file', nargs='*', help="the original directory's name")
     parser.add_argument('-d', '--diff', nargs='*', help="the diff directory's name")
     parser.add_argument('-o', '--outdir', nargs='?',  # default='parse_result.txt',
                         help='For analysis mode, save result in the custom directory')
     args = parser.parse_args()
+    # 0: qualcomm; 1: MTK
+    platform_flag = args.platform
+    if int(platform_flag):
+        PLATFORM_PKGS = ["com.mediatek", "com.mtk"]
+    else:
+        PLATFORM_PKGS = ["com.qti", "com.qualcomm"]
 
     if args.file is None:
         # prepare output directory's name
-        if args.outdir is None:
-            device_name = check_output(CMD_DEVICE, shell=True)
-            version_name = check_output(CMD_VERSION, shell=True)
-            cur_time = strftime("%m%d%H%M")
-            outdir = "{}_{}_{}".format(device_name.strip(), version_name.strip(), cur_time.strip())
-        else:
-            outdir = str(args.outdir)
+        try:
+            if args.outdir is None:
+                device_name = check_output(CMD_DEVICE, shell=True)
+                version_name = check_output(CMD_VERSION, shell=True)
+                cur_time = strftime("%m%d%H%M")
+                outdir = "{}_{}_{}".format(device_name.strip(), version_name.strip(), cur_time.strip())
+            else:
+                outdir = str(args.outdir)
 
-        # Run command with arguments and return its output as a byte string.
-        file_meminfo = check_output(CMD_MEMINFO, shell=True)
-        write_to_file("{}/{}".format(outdir, meminfo_file), file_meminfo)
-        system_mem, filtered_procs_mem = get_file_meminfo(file_meminfo)
+            # Run command with arguments and return its output as a byte string.
+            file_meminfo = check_output(CMD_MEMINFO, shell=True)
+            write_to_file("{}/{}".format(outdir, meminfo_file), file_meminfo)
+            system_mem, filtered_procs_mem = get_file_meminfo(file_meminfo)
 
-        installed_pkgs_str = check_output(CMD_PACKAGES, shell=True)
-        write_to_file("{}/{}".format(outdir, packages_file), installed_pkgs_str)
-        pkgs_dic = get_packages_dic(installed_pkgs_str)
+            installed_pkgs_str = check_output(CMD_PACKAGES, shell=True)
+            write_to_file("{}/{}".format(outdir, packages_file), installed_pkgs_str)
+            pkgs_dic = get_packages_dic(installed_pkgs_str)
+        except subprocess.CalledProcessError:
+            print "*** Error: please check your device state.\n"
+            # Programatically stop execution of python script
+            raise SystemError(0)
 
         groups_mem_kb, groups_mem = get_procs_attr_group(filtered_procs_mem, pkgs_dic)
-        print_mem_table("{}/{}".format(outdir, out_parse_table), system_mem, groups_mem_kb, pkgs_dic)
+        out_parse_table = "{}/{}".format(outdir, out_parse_table)
+        print_mem_table(out_parse_table, system_mem, groups_mem_kb, pkgs_dic)
+        print "Finished: ##The output files is in: {}/".format(os.path.dirname(out_parse_table))
     else:
         original_dir = args.file[0]
         diff_dir = args.diff[0]
@@ -91,14 +118,17 @@ Example of use:
         # print "\n**************************************************"
         # print system_mem_2
         # print "\n\n************* process meminfo ********************"
+        # print "filtered_procs_mem_1:"
         # for k, v in sorted(filtered_procs_mem_1.items(), key=lambda x: (-int(x[1]), x[0])):
         #     print (' {1}:  {0}'.format(k, v))
         #
         # print "\n**************************************************"
+        # print "filtered_procs_mem_2:"
         # for k, v in sorted(filtered_procs_mem_2.items(), key=lambda x: (-int(x[1]), x[0])):
         #     print (' {1}:  {0}'.format(k, v))
         #
         # print "\n\n***************** packages ***********************"
+        # print "pkgs_dic_1:"
         # for key in pkgs_dic_1:
         #     print key, ":"
         #     for pkg in sorted(pkgs_dic_1[key]):
@@ -106,6 +136,7 @@ Example of use:
         #     print 'len=', len(pkgs_dic_1[key])
         #
         # print "\n**************************************************"
+        # print "pkgs_dic_2:"
         # for key in pkgs_dic_2:
         #     print key, ":"
         #     for pkg in sorted(pkgs_dic_2[key]):
@@ -117,17 +148,30 @@ Example of use:
         # print "\n**************************************************"
         # print groups_mem_kb_2
         # print "\n\n**************group meminfo ***********************"
+        # print "groups_mem_1:"
         # for key in groups_mem_1:
         #     print key, ":"
         #     for pkg in sorted(groups_mem_1[key]):
         #         print "** ", pkg
         #     print 'len=', len(groups_mem_1[key])
         # print "\n**************************************************"
+        # print "groups_mem_2:"
         # for key in groups_mem_2:
         #     print key, ":"
         #     for pkg in sorted(groups_mem_2[key]):
         #         print "** ", pkg
         #     print 'len=', len(groups_mem_2[key])
+
+
+def silent_remove(filename):
+    try:
+        if os.path.isdir(filename):
+            shutil.rmtree(filename)
+        else:
+            os.remove(filename)
+    except OSError as exc:  # this would be "except OSError, e:" before Python 2.6
+        if exc.errno != errno.ENOENT:  # errno.ENOENT = no such file or directory
+            raise  # re-raise exception if a different error occured
 
 
 def read_file(filename):
@@ -148,31 +192,25 @@ def write_to_file(filename, file_meminfo):
             fp.write(file_meminfo)
     except IOError:
         print 'Oops! write file error.'
-        # Most pythonic way to delete a file which may not exist
-        # http://stackoverflow.com/a/10840586/4710864
-        try:
-            os.remove(filename)
-        except OSError:
-            if exc.errno != errno.EEXIST:
-                raise
+        silent_remove(filename)
 
 
 def get_procs_attr_group(filtered_procs_mem, pkgs_dic):
-    gms_kb = qcom_kb = third_kb = sys_kb = 0
+    gms_kb = platform_kb = third_kb = sys_kb = 0
     groups_mem_kb = {}
     groups_mem = {}
     gms_procs_mem = []
-    qcom_procs_mem = []
+    platform_procs_mem = []
     third_procs_mem = []
     sys_procs_mem = []
 
     for proc in filtered_procs_mem:
-        if "com.google" in proc or any(item in proc for item in GOOGLE_PROC_WHITE_LIST):
+        if any(item in proc for item in GOOGLE_PROC_WHITE_LIST):
             gms_kb += int(filtered_procs_mem[proc])
             gms_procs_mem.append(proc)
-        elif "com.qti" in proc or "com.qualcomm" in proc:
-            qcom_kb += int(filtered_procs_mem[proc])
-            qcom_procs_mem.append(proc)
+        elif any(plat_pkg in proc for plat_pkg in PLATFORM_PKGS):
+            platform_kb += int(filtered_procs_mem[proc])
+            platform_procs_mem.append(proc)
         else:
             if any(pkg in proc for pkg in pkgs_dic['system'] if pkg != 'android' and pkg != 'android.overlay')\
                     or any(proc == item for item in SYSTEM_PROC_WHITE_LIST):
@@ -183,14 +221,20 @@ def get_procs_attr_group(filtered_procs_mem, pkgs_dic):
                 third_procs_mem.append(proc)
 
     groups_mem_kb.update({'GMS': gms_kb})
-    groups_mem_kb.update({'Qcom': qcom_kb})
     groups_mem_kb.update({'Third': third_kb})
     groups_mem_kb.update({'System apps': sys_kb})
+    if int(platform_flag):
+        groups_mem_kb.update({'MTK': platform_kb})
+    else:
+        groups_mem_kb.update({'Qcom': platform_kb})
 
     groups_mem.update({'GMS': gms_procs_mem})
-    groups_mem.update({'Qcom': qcom_procs_mem})
     groups_mem.update({'Third': third_procs_mem})
     groups_mem.update({'System apps': sys_procs_mem})
+    if int(platform_flag):
+        groups_mem.update({'MTK': platform_procs_mem})
+    else:
+        groups_mem.update({'Qcom': platform_procs_mem})
     return groups_mem_kb, groups_mem
 
 
@@ -202,24 +246,27 @@ def get_packages_dic(installed_pkgs_str):
         pkg_mat = re.search(r'package:(/\w+/[\w\-]+)/[^=]+=(.+)', pkg)
         if pkg_mat is not None:
             installed_pkgs.append(pkg_mat.group(2).strip())
-            if "/data/app" == pkg_mat.group(1):
+            if "/data/app" == pkg_mat.group(1) and not any(item in pkg for item in GOOGLE_PROC_WHITE_LIST):
                 third_pkgs.append(pkg_mat.group(2).strip())
     pkgs_dic.update({'third': third_pkgs})
     pkgs_dic.update({'installed': installed_pkgs})
 
     gms_pkgs = []
-    qcom_pkgs = []
+    platform_pkgs = []
     system_pkgs = []
     for pkg in installed_pkgs:
-        if "com.google" in pkg or any(pkg == item for item in GOOGLE_PROC_WHITE_LIST):
+        if any(item in pkg for item in GOOGLE_PROC_WHITE_LIST):
             gms_pkgs.append(pkg)
-        elif "com.qti" in pkg or "com.qualcomm" in pkg:
-            qcom_pkgs.append(pkg)
+        elif any(plat_pkg in pkg for plat_pkg in PLATFORM_PKGS):
+            platform_pkgs.append(pkg)
         elif pkg not in third_pkgs:
             system_pkgs.append(pkg)
     pkgs_dic.update({'gms': gms_pkgs})
-    pkgs_dic.update({'qcom': qcom_pkgs})
     pkgs_dic.update({'system': system_pkgs})
+    if int(platform_flag):
+        pkgs_dic.update({'mtk': platform_pkgs})
+    else:
+        pkgs_dic.update({'qcom': platform_pkgs})
     return pkgs_dic
 
 
@@ -294,17 +341,23 @@ def print_mem_table(outfile, system_mem, groups_mem_kb, pkgs_dic):
         # write module memory info
         fp.write(row_format.format("*Module*", "*Val(MB)*"))
         fp.write(row_format.format('GMS', kb2mb(groups_mem_kb['GMS'])))
-        fp.write(row_format.format('Qcom', kb2mb(groups_mem_kb['Qcom'])))
         fp.write(row_format.format('Third', kb2mb(groups_mem_kb['Third'])))
         fp.write(row_format.format('System apps', kb2mb(groups_mem_kb['System apps'])))
+        if int(platform_flag):
+            fp.write(row_format.format('MTK', kb2mb(groups_mem_kb['MTK'])))
+        else:
+            fp.write(row_format.format('Qcom', kb2mb(groups_mem_kb['Qcom'])))
         fp.write("\n")
         # write packages info
         fp.write(row_format.format("*Packages*", "*Count*"))
         fp.write(row_format.format('installed', len(pkgs_dic['installed'])))
         fp.write(row_format.format('gms', len(pkgs_dic['gms'])))
-        fp.write(row_format.format('qcom', len(pkgs_dic['qcom'])))
         fp.write(row_format.format('third', len(pkgs_dic['third'])))
         fp.write(row_format.format('system', len(pkgs_dic['system'])))
+        if int(platform_flag):
+            fp.write(row_format.format('mtk', len(pkgs_dic['mtk'])))
+        else:
+            fp.write(row_format.format('qcom', len(pkgs_dic['qcom'])))
 
 
 def kb2mb(num):
@@ -366,9 +419,12 @@ def print_diff_table(system_mem_1, system_mem_2, pkgs_dic_1, pkgs_dic_2,
                      groups_mem_kb_1, groups_mem_kb_2, groups_mem_1, groups_mem_2):
     ws_tile = ['Items', original_dir, diff_dir, 'Gap', 'Detail']
     total_memory_items = ['Total RAM', 'Free RAM', 'Kernel', 'Native']
-    module_memory_items = ['GMS', 'Qcom', 'Third', 'System apps']
-    package_items = ['installed', 'gms', 'qcom', 'third', 'system']
-
+    if int(platform_flag):
+        module_memory_items = ['GMS', 'MTK', 'Third', 'System apps']
+        package_items = ['installed', 'gms', 'mtk', 'third', 'system']
+    else:
+        module_memory_items = ['GMS', 'Qcom', 'Third', 'System apps']
+        package_items = ['installed', 'gms', 'qcom', 'third', 'system']
     wb = Workbook()
     ws = wb.active
     ws.title = "Memory Diff Table"
@@ -377,31 +433,35 @@ def print_diff_table(system_mem_1, system_mem_2, pkgs_dic_1, pkgs_dic_2,
     # add title at the top of the table
     ws.append(styled_title_cell(ws, ws_tile))
 
-    for col in TITLE:
-        styled_subtitle(col, ws.cell(column=1, row=TITLE.index(col) + 2, value=col))
+    if int(platform_flag):
+        title = MTK_TITLE
+    else:
+        title = QCOM_TITLE
+
+    for col in title:
+        styled_subtitle(col, ws.cell(column=1, row=title.index(col) + 2, value=col))
         if col in total_memory_items:
-            styled_cell(ws.cell(column=2, row=TITLE.index(col) + 2, value="{}MB".format(kb2mb(system_mem_1[col]))))
-            styled_cell(ws.cell(column=3, row=TITLE.index(col) + 2, value="{}MB".format(kb2mb(system_mem_2[col]))))
-            styled_cell(ws.cell(column=4, row=TITLE.index(col) + 2,
+            styled_cell(ws.cell(column=2, row=title.index(col) + 2, value="{}MB".format(kb2mb(system_mem_1[col]))))
+            styled_cell(ws.cell(column=3, row=title.index(col) + 2, value="{}MB".format(kb2mb(system_mem_2[col]))))
+            styled_cell(ws.cell(column=4, row=title.index(col) + 2,
                                 value="{}MB".format(kb2mb(system_mem_1[col]) - kb2mb(system_mem_2[col]))))
         if col in module_memory_items:
-            styled_cell(ws.cell(column=2, row=TITLE.index(col) + 2, value="{}MB".format(kb2mb(groups_mem_kb_1[col]))))
-            styled_cell(ws.cell(column=3, row=TITLE.index(col) + 2, value="{}MB".format(kb2mb(groups_mem_kb_2[col]))))
-            styled_cell(ws.cell(column=4, row=TITLE.index(col) + 2,
+            styled_cell(ws.cell(column=2, row=title.index(col) + 2, value="{}MB".format(kb2mb(groups_mem_kb_1[col]))))
+            styled_cell(ws.cell(column=3, row=title.index(col) + 2, value="{}MB".format(kb2mb(groups_mem_kb_2[col]))))
+            styled_cell(ws.cell(column=4, row=title.index(col) + 2,
                                 value="{}MB".format(kb2mb(groups_mem_kb_1[col]) - kb2mb(groups_mem_kb_2[col]))))
-            # Writing multi-line strings into cells using openpyxl
-            c = ws.cell(column=5, row=TITLE.index(col) + 2)
+            c = ws.cell(column=5, row=title.index(col) + 2)
             # c.style.alignment.wrap_text = True
             c.value = "ADDED PROCESSES:\n{}\n\nREMOVED PROCESSES:\n{}".format(
                 '\n'.join(set(groups_mem_1[col]) - set(groups_mem_2[col])),
                 '\n'.join(set(groups_mem_2[col]) - set(groups_mem_1[col])))
             styled_cell(c)
         if col in package_items:
-            styled_cell(ws.cell(column=2, row=TITLE.index(col) + 2, value=len(pkgs_dic_1[col])))
-            styled_cell(ws.cell(column=3, row=TITLE.index(col) + 2, value=len(pkgs_dic_2[col])))
-            styled_cell(ws.cell(column=4, row=TITLE.index(col) + 2,
+            styled_cell(ws.cell(column=2, row=title.index(col) + 2, value=len(pkgs_dic_1[col])))
+            styled_cell(ws.cell(column=3, row=title.index(col) + 2, value=len(pkgs_dic_2[col])))
+            styled_cell(ws.cell(column=4, row=title.index(col) + 2,
                                 value=len(pkgs_dic_1[col]) - len(pkgs_dic_2[col])))
-            c = ws.cell(column=5, row=TITLE.index(col) + 2)
+            c = ws.cell(column=5, row=title.index(col) + 2)
             # c.style.alignment.wrap_text = True
             diff_pkgs = [['\nADDED PACKAGES:'], set(pkgs_dic_1[col]) - set(pkgs_dic_2[col]),
                          ['\nREMOVED PACKAGES:'], set(pkgs_dic_2[col]) - set(pkgs_dic_1[col])]
@@ -413,6 +473,7 @@ def print_diff_table(system_mem_1, system_mem_2, pkgs_dic_1, pkgs_dic_2,
 
     render_ws(ws)
     wb.save(filename=out_parse_xlsx)
+    print "Finished: save xlsx at", out_parse_xlsx
 
 
 def filter_out_items(list1, list2):
@@ -420,4 +481,10 @@ def filter_out_items(list1, list2):
 
 
 if __name__ == '__main__':
-    main()
+    # Catching ANY exception, and remove output files if any.
+    try:
+        main()
+    except Exception as e:
+        silent_remove(os.path.dirname(out_parse_table))
+        silent_remove(out_parse_xlsx)
+        raise

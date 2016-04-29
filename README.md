@@ -11,3 +11,5 @@ I do not consider myself a programmer, I create these little programs as experim
 - `4. parse_meminfo.py` - parse result of 'adb shell dumpsys meminfo', output: the excel. The usage can be found in 'parse_meminfo -h'
 
 - `5.format_tabular_output.py` - It comes from stackoverflow.com, a sample about how to print format tabular in the txt file.
+
+- `6.autoscroll_device.py` - Use adb command to simulate swipe action on the Android device's screen in 30 minutes.
