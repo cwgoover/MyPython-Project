@@ -141,54 +141,54 @@ Example of use:
         print_diff_table(system_mem_1, system_mem_2, pkgs_dic_1, pkgs_dic_2,
                          groups_mem_kb_1, groups_mem_kb_2, groups_mem_1, groups_mem_2)
 
-        # print "************* system meminfo*********************"
-        # print system_mem_1
-        # print "\n**************************************************"
-        # print system_mem_2
-        # print "\n\n************* process meminfo ********************"
-        # print "filtered_procs_mem_1:"
-        # for k, v in sorted(filtered_procs_mem_1.items(), key=lambda x: (-int(x[1]), x[0])):
-        #     print (' {1}:  {0}'.format(k, v))
-        #
-        # print "\n**************************************************"
-        # print "filtered_procs_mem_2:"
-        # for k, v in sorted(filtered_procs_mem_2.items(), key=lambda x: (-int(x[1]), x[0])):
-        #     print (' {1}:  {0}'.format(k, v))
-        #
-        # print "\n\n***************** packages ***********************"
-        # print "pkgs_dic_1:"
-        # for key in pkgs_dic_1:
-        #     print key, ":"
-        #     for pkg in sorted(pkgs_dic_1[key]):
-        #         print "** ", pkg
-        #     print 'len=', len(pkgs_dic_1[key])
-        #
-        # print "\n**************************************************"
-        # print "pkgs_dic_2:"
-        # for key in pkgs_dic_2:
-        #     print key, ":"
-        #     for pkg in sorted(pkgs_dic_2[key]):
-        #         print "** ", pkg
-        #     print 'len=', len(pkgs_dic_2[key])
-        #
-        # print "\n\n************** group meminfo kb ******************"
-        # print groups_mem_kb_1
-        # print "\n**************************************************"
-        # print groups_mem_kb_2
-        # print "\n\n**************group meminfo ***********************"
-        # print "groups_mem_1:"
-        # for key in groups_mem_1:
-        #     print key, ":"
-        #     for pkg in sorted(groups_mem_1[key]):
-        #         print "** ", pkg
-        #     print 'len=', len(groups_mem_1[key])
-        # print "\n**************************************************"
-        # print "groups_mem_2:"
-        # for key in groups_mem_2:
-        #     print key, ":"
-        #     for pkg in sorted(groups_mem_2[key]):
-        #         print "** ", pkg
-        #     print 'len=', len(groups_mem_2[key])
+        print "************* system meminfo*********************"
+        print system_mem_1
+        print "\n**************************************************"
+        print system_mem_2
+        print "\n\n************* process meminfo ********************"
+        print "filtered_procs_mem_1:"
+        for k, v in sorted(filtered_procs_mem_1.items(), key=lambda x: (-int(x[1]), x[0])):
+            print (' {1}:  {0}'.format(k, v))
+
+        print "\n**************************************************"
+        print "filtered_procs_mem_2:"
+        for k, v in sorted(filtered_procs_mem_2.items(), key=lambda x: (-int(x[1]), x[0])):
+            print (' {1}:  {0}'.format(k, v))
+
+        print "\n\n***************** packages ***********************"
+        print "pkgs_dic_1:"
+        for key in pkgs_dic_1:
+            print key, ":"
+            for pkg in sorted(pkgs_dic_1[key]):
+                print "** ", pkg
+            print 'len=', len(pkgs_dic_1[key])
+
+        print "\n**************************************************"
+        print "pkgs_dic_2:"
+        for key in pkgs_dic_2:
+            print key, ":"
+            for pkg in sorted(pkgs_dic_2[key]):
+                print "** ", pkg
+            print 'len=', len(pkgs_dic_2[key])
+
+        print "\n\n************** group meminfo kb ******************"
+        print groups_mem_kb_1
+        print "\n**************************************************"
+        print groups_mem_kb_2
+        print "\n\n**************group meminfo ***********************"
+        print "groups_mem_1:"
+        for key in groups_mem_1:
+            print key, ":"
+            for pkg in sorted(groups_mem_1[key]):
+                print "** ", pkg
+            print 'len=', len(groups_mem_1[key])
+        print "\n**************************************************"
+        print "groups_mem_2:"
+        for key in groups_mem_2:
+            print key, ":"
+            for pkg in sorted(groups_mem_2[key]):
+                print "** ", pkg
+            print 'len=', len(groups_mem_2[key])
 
 
 # Most pythonic way to delete a file which may not exist
@@ -423,7 +423,7 @@ def print_mem_table(outfile, system_mem, groups_mem_kb, pkgs_dic):
 
 
 def kb2mb(num):
-    return int(num) // 1000
+    return int(num) // 1024
 
 
 # border_style = Style(font=Font(name='Console', size=10, bold=False,

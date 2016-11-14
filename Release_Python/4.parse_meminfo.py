@@ -361,7 +361,7 @@ def print_mem_table(outfile, system_mem, groups_mem_kb, pkgs_dic):
 
 
 def kb2mb(num):
-    return int(num) // 1000
+    return int(num) // 1024
 
 
 def styled_title_cell(ws, data):
